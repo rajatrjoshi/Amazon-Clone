@@ -7,7 +7,7 @@ import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { getBasketTotal } from './reducer';
 import CurrencyFormat from "react-currency-format";
 import axios from './axios';
-
+import {db} from "./firebase";
 
 function Payment() {
     const [{basket, user}, dispatch] = useStateValue();
@@ -25,20 +25,20 @@ function Payment() {
     const [disabled, setDisabled] = useState(true);
 
     useEffect(() => {
-        //generate a special stripe secret which allows us to charge a customer
-
+        // generate the special stripe secret which allows us to charge a customer
         const getClientSecret = async () => {
             const response = await axios({
                 method: 'post',
                 // Stripe expects the total in a currencies subunits
-                url: '/payments/create?total=${getBasketTotal(basket) * 100}'
+                url: `/payments/create?total=${getBasketTotal(basket) * 100}`
             });
             setClientSecret(response.data.clientSecret)
         }
+
         getClientSecret();
     }, [basket])
 
-    
+
     console.log('The Secret is ', clientSecret)
 
     const handleSubmit = async (e) => {
@@ -51,9 +51,23 @@ function Payment() {
             }
         }).then(({paymentIntent}) => {
             // paymentIntent = payment Confirmation
+            db.collection('users')
+            .doc(user?.uid)
+            .collection('orders')
+            .doc(paymentIntent.id)
+            .set({
+                basket: basket,
+                amount: paymentIntent.amount/100,
+                created: paymentIntent.created
+            });
+            
             setSucceeded(true);
             setError(null);
             setProcessing(false);
+
+            dispatch({
+                type: 'EMPTY_BASKET'
+            })
 
             history.replace('/orders')
         }) 
@@ -120,7 +134,7 @@ function Payment() {
                                     value = {getBasketTotal(basket)}
                                     displayType = {"text"}
                                     thousandSeparator = {true}
-                                    prefix = {"$"}
+                                    prefix = {"₹"}
                                     />
                                     <button disabled={processing || disabled || succeeded}>
                                         <span>{processing ? <p>Processing</p> :
